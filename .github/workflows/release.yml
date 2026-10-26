@@ -100,12 +100,12 @@ jobs:
     needs: [release-please, build, publish]
     runs-on: ubuntu-latest
     permissions:
-      contents: read # the tap is written with HOMEBREW_TAP_TOKEN, not GITHUB_TOKEN
+      contents: read # the tap is written with a deploy key (write access to the tap only), not GITHUB_TOKEN
     env:
       VERSION: ${{ needs.release-please.outputs.version }}
       SHA_ARM64: ${{ needs.build.outputs.sha_arm64 }}
       SHA_X64: ${{ needs.build.outputs.sha_x64 }}
-      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      HAS_TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY != '' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -115,13 +115,13 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: zxcvbinz/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           path: tap
 
       - name: Render formula
         run: |
           set -euo pipefail
-          [ -n "$TAP_TOKEN" ] || { echo "HOMEBREW_TAP_TOKEN secret is not set" >&2; exit 1; }
+          [ "$HAS_TAP_KEY" = "true" ] || { echo "HOMEBREW_TAP_DEPLOY_KEY secret is not set" >&2; exit 1; }
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || { echo "bad version" >&2; exit 1; }
           [[ "$SHA_ARM64" =~ ^[0-9a-f]{64}$ && "$SHA_X64" =~ ^[0-9a-f]{64}$ ]] || { echo "bad sha256" >&2; exit 1; }
           mkdir -p tap/Formula

@@ -7,13 +7,15 @@ and `@SHA256_X64@` and pushes the result to `Formula/sbs.rb` in the tap repo.
 
 1. Create the public repo `zxcvbinz/homebrew-tap` (the `homebrew-` prefix is required)
    with a `Formula/` directory (add a README so the default branch exists).
-2. Create a fine-grained personal access token:
-   - Resource owner: `zxcvbinz`
-   - Repository access: only `zxcvbinz/homebrew-tap`
-   - Permissions: Repository -> Contents: Read and write (nothing else)
-3. In `zxcvbinz/supabase-swap` -> Settings -> Secrets and variables -> Actions, add
-   the secret `HOMEBREW_TAP_TOKEN` with that token.
-4. The release assets must be downloadable without authentication, so the
+2. Create an SSH deploy key that can write to the tap only:
+
+       ssh-keygen -t ed25519 -N "" -C "supabase-swap release" -f tap_key
+       gh repo deploy-key add tap_key.pub --repo zxcvbinz/homebrew-tap --allow-write --title "supabase-swap release"
+       gh secret set HOMEBREW_TAP_DEPLOY_KEY --repo zxcvbinz/supabase-swap < tap_key
+       rm tap_key tap_key.pub
+
+   The key can push to `zxcvbinz/homebrew-tap` and nothing else.
+3. The release assets must be downloadable without authentication, so the
    main repo has to be public before users can `brew install`.
 
 ## Releasing

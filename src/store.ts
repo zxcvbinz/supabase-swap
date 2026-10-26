@@ -167,10 +167,15 @@ export const updateConfig = update;
 export const slug = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 
-/** First free alias starting from a suggestion: acme, acme-2, acme-3... */
-export function uniqueAlias(base: string): string {
+/**
+ * First free alias from a suggestion. When several accounts share an org name, the email tells
+ * them apart (acme, acme-info, acme-mario); a number is the last resort (acme-2).
+ */
+export function uniqueAlias(base: string, email?: string): string {
   const taken = loadConfig().accounts;
   const b = slug(base) || "account";
+  const who = email ? slug(email.split("@")[0]!) : "";
+  for (const c of [b, who && who !== b ? `${b}-${who}`.slice(0, 48) : ""]) if (c && !has(taken, c)) return c;
   let alias = b;
   for (let i = 2; has(taken, alias); i++) alias = `${b}-${i}`;
   return alias;

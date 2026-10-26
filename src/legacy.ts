@@ -71,7 +71,7 @@ async function importToken(token: string): Promise<string | undefined> {
   try {
     const s = await snapshot(token);
     if (listAccounts().some((a) => a.email.toLowerCase() === s.profile.primary_email.toLowerCase())) return; // account already saved
-    const alias = uniqueAlias(s.orgs[0]?.name ?? s.profile.primary_email.split("@")[0]!);
+    const alias = uniqueAlias(s.orgs[0]?.name ?? s.profile.primary_email.split("@")[0]!, s.profile.primary_email);
     putAccount(buildAccount({ alias, kind: "mine", email: s.profile.primary_email, userId: s.profile.gotrue_id, token, projects: s.projects }));
     return alias;
   } catch (e) {

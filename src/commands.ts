@@ -222,7 +222,7 @@ export async function cmdAdd(aliasArg: string | undefined, o: Opts) {
   } else {
     if (wanted && getAccount(wanted)) throw new UserError(`Account "${wanted}" already exists with another email.`, "exists");
     const kind = o.mine ? "mine" : o.client ? "client" : interactive() ? await askKind() : "client";
-    const alias = wanted ?? uniqueAlias(snap.orgs[0]?.name ?? email.split("@")[0]!);
+    const alias = wanted ?? uniqueAlias(snap.orgs[0]?.name ?? email.split("@")[0]!, email);
     acc = buildAccount({ alias, kind, email, userId: snap.profile.gotrue_id, token, projects: snap.projects });
     putAccount(acc);
   }

@@ -1,35 +1,32 @@
-# supabase-swap (`sbs`) — guida per agenti
+# supabase-swap (`sbs`) - guide for agents
 
-`sbs` gestisce più account Supabase per la Supabase CLI. Usalo sempre con `--json`: ogni comando stampa un solo oggetto JSON su stdout (`{"ok": true, ...}` oppure `{"ok": false, "error", "code", "hint"}`), exit code 0 se va bene, 1 per errori dell'utente.
+`sbs` manages several Supabase accounts (the owner's and his clients') for the Supabase CLI and remembers which account owns which project. Always pass `--json`: every command prints a single JSON object on stdout (`{"ok": true, ...}` or `{"ok": false, "error", "code", "hint"}`). Exit codes: 0 ok, 1 user error, 130 cancelled. Progress notes go to stderr.
 
-## Regole
-- **Non cambiare l'account globale se non serve.** Per lanciare la Supabase CLI con un account usa `sbs run <alias> -- supabase <comando>`: il token passa solo a quel comando.
-- Senza `--as`, i comandi usano l'account del file `.supabase-account` più vicino (cartella corrente o sopra), altrimenti quello attivo. Controlla con `sbs current --json`.
-- Le azioni che costano o non si annullano (creare progetti, annullare inviti, togliere account) chiedono `--yes`. Senza, ricevi `code: "confirmation_required"`: chiedi all'utente prima di ripetere con `--yes`.
-- Non stampare segreti in chiaro. `sbs creds <alias> --reveal` solo se l'utente lo chiede.
-- Registrazione e accesso alla dashboard passano da una finestra di Chrome sullo schermo dell'utente, perché Supabase chiede un captcha che risolve lui. `sbs new <alias> --email <email> --json` registra l'account, salva le credenziali e restituisce `status: "pending_confirmation"`: l'utente conferma la mail, poi `sbs connect <alias> --json` entra e crea il token da solo. Avvisa l'utente prima di lanciarli.
-- Gli inviti non sono automatici: `sbs open <alias> --team --org <slug>` apre la pagina Team già loggata con quell'account.
+## Rules
+- Do not switch the global account when you do not need to. Prefer `sbs run <account|project> -- supabase <command>`: the token is passed to that command only. `sbs run` prints `sbs: running as <account>` to stderr; a loose substring match is refused without `--yes` when not on a terminal, so use the exact alias, ref or name.
+- To find which account owns a project: `sbs find <name|ref|org> --json`. The project cache is local, so this is instant.
+- `<account|project>` resolves as: alias, then project ref, then project name (exact, then unique substring). Otherwise `ambiguous` or `not_found`.
+- Never print tokens or passwords. `sbs creds` never returns the password in JSON or when stdout is not a terminal.
+- `sbs add` and `sbs new` open the user's default browser and need a terminal (the user types a verification code). Tell the user before running them. The browser must be signed in to Supabase as the account being added. In a non-interactive run they fail with `needs_login` / `needs_terminal`.
+- Commands that need a valid token (`use`, `run`, `sync`, `projects --refresh`) re-check it at most once an hour. A revoked token needs the user to run `sbs add` again.
+- `sbs rm` needs `--yes` (it only forgets the account; the token stays valid on Supabase until revoked).
 
-## Comandi
-| Scopo | Comando |
+## Commands
+| Purpose | Command |
 |---|---|
-| Account salvati | `sbs list --json` |
-| Account in uso | `sbs current --json` |
-| Comando con un account | `sbs run <alias> -- supabase projects list` |
-| Cambia account globale | `sbs use <alias> --json` |
-| Aggiungi account esistente | `printf %s "$TOKEN" \| sbs add <alias> --email <email> --token-stdin --json` |
-| Salva/aggiorna password | `printf %s "$PW" \| sbs set <alias> --password-stdin --json` |
-| Organizzazioni | `sbs orgs --as <alias> --json` · `sbs orgs create "<nome>" --as <alias> --json` |
-| Membri e inviti in attesa | `sbs members <slug> --as <alias> --json` |
-| Progetti | `sbs projects --as <alias> [--org <slug>] --json` |
-| Crea progetto | `sbs projects create "<nome>" --org <slug> --region eu-central-1 --as <alias> --yes --json` (la password del DB viene salvata) |
-| Nuovo account cliente | `sbs new <alias> --email <email> --json` poi, dopo la conferma della mail, `sbs connect <alias> --json` |
-| Collega il token dal browser (con la password salvata entra da solo, senza password entra l'utente) | `sbs connect <alias> --json` |
-| Apri la dashboard come quell'account | `sbs open <alias> [--team --org <slug> \| --project <ref>] --json` |
-| Rinomina / togli da sbs | `sbs rename <alias> <nuovo> --json` · `sbs remove <alias> --yes --json` |
-| Stato dei token | `sbs doctor --json` |
+| Accounts | `sbs ls --json` |
+| Projects of all accounts | `sbs projects [text] [--refresh] --json` |
+| Which account owns a project | `sbs find <text> --json` |
+| Run as an account/project | `sbs run <account\|project> -- supabase projects list` |
+| Switch the CLI globally | `sbs use <account\|project> --json` |
+| Add an existing account | `sbs add [alias] [--mine\|--client]` |
+| Create a client account | `sbs new <email> [alias]` |
+| Open the dashboard / team page | `sbs open [account\|project] [--team] --json` |
+| Check tokens, refresh projects | `sbs sync --json` |
+| Rename / forget | `sbs rename <alias> <new>` / `sbs rm <alias> --yes` |
 
-## Codici di errore utili
-`unknown_account`, `missing_token` (serve `sbs login <alias>` dall'utente), `email_mismatch` (token di un altro account), `token_rejected`, `ambiguous_org` (aggiungi `--org`), `confirmation_required`, `email_not_confirmed`, `bad_credentials`, `already_registered`, `browser_busy` (finestra di Chrome di quell'account già aperta), `cancelled` (l'utente ha annullato).
+## MCP
+Register once: `claude mcp add sbs -- sbs mcp`. Tools: `list_accounts`, `list_projects {query?}`, `find_project {query}` (returns the account alias to use with `sbs run`), `sync`. No tokens or passwords are exposed.
 
-`sbs list --json` divide gli account con `kind`: `mine` (account dell'utente) o `client`.
+## Error codes
+`not_found`, `ambiguous`, `exists`, `invalid_alias`, `needs_login` (run `sbs add`), `needs_terminal`, `email_mismatch` (browser signed in as another account), `login_failed`, `confirmation_required` (repeat with `--yes`), `no_password`, `password_hidden`, `copy_failed`, `keychain_kept`, `locked`, `network`, `cancelled`, `http_<status>`.

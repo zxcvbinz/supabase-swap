@@ -1,34 +1,31 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import * as cmd from "./commands";
+import { VERSION } from "./env";
 import { fail, flags, interactive } from "./out";
 import { menu } from "./menu";
-import { accountsManager } from "./manage";
+import { migrateOldFormat } from "./legacy";
 import { UserError } from "./store";
 
-const HELP = `sbs — più account Supabase per la CLI
+const HELP = `sbs - switch between Supabase accounts
 
-  sbs add                 aggiungi un account che hai già (ti fa le domande)
-  sbs new                 crea un account per un cliente
-  sbs use [alias]         la Supabase CLI usa questo account
-  sbs accounts            vedi e gestisci gli account (miei e clienti)
-  sbs open [alias]        apri la dashboard già loggata con quell'account
+  sbs                          interactive screen (accounts and actions)
+  sbs add [alias]              sign in via your browser, save the account  [--mine|--client]
+  sbs new <email> [alias]      create a Supabase account for a client
+  sbs use <account|project>    point the Supabase CLI at that account
+  sbs run <account|project> -- <cmd...>
+                               run a command as that account only
+  sbs ls                       accounts and project counts
+  sbs projects [text]          all projects, with their account  [--refresh]
+  sbs find <text>              which account owns a project
+  sbs open [account|project]   dashboard in your browser  [--team]
+  sbs sync                     check tokens, refresh the project list
+  sbs rename <alias> <new>
+  sbs rm <alias>               forget an account (changes nothing on Supabase)
+  sbs creds <alias> [--copy]   password of an account made with 'new'
+  sbs mcp                      MCP server for agents (stdio)
 
-Altri comandi
-  sbs list | current | doctor
-  sbs run <alias> -- <comando>          un comando con un account, senza cambiare quello attivo
-  sbs pin [alias]                       lega la cartella a un account (.supabase-account)
-  sbs hook zsh                          cambio automatico entrando nelle cartelle legate
-  sbs connect <alias>                   entra con email e password salvate e crea il token
-  sbs login <alias>                     token con il supabase login ufficiale
-  sbs set <alias> [--email] [--password] [--token-stdin] [--kind mine|client] [--label]
-  sbs creds [alias] [--reveal] [--copy password|token|email]
-  sbs rename <alias> <nuovo> | remove <alias> | env [alias]
-  sbs orgs [create <nome>] | members [slug] | projects [create <nome> --org <slug>]
-  sbs open [alias] --team --org <slug> | --project <ref>
-
-Per script e agenti: tutte le domande hanno il loro flag
-  (--email, --password-stdin, --token-stdin, --kind, --as, --org), --json per l'output, --yes per le conferme.
+Flags: --json (machine output)  --yes (skip confirmations)  --help  --version
 `;
 
 async function main() {
@@ -40,77 +37,49 @@ async function main() {
     allowPositionals: true,
     strict: false,
     options: Object.fromEntries(
-      ["email", "token", "kind", "label", "as", "org", "region", "db-pass", "name", "copy", "project"].map((k) => [k, { type: "string" }]),
+      ["json", "yes", "help", "version", "mine", "client", "team", "refresh", "copy"].map((k) => [k, { type: "boolean" as const }]),
     ),
   });
-  // `--password` alone asks for it, `--password x` sets it
-  const pw = argv.indexOf("--password");
-  if (pw >= 0 && argv[pw + 1] && !argv[pw + 1]!.startsWith("--")) {
-    o.password = argv[pw + 1];
-    positionals.splice(positionals.indexOf(argv[pw + 1]!), 1);
-  }
   flags.json = Boolean(o.json) || process.env.SBS_JSON === "1";
   flags.yes = Boolean(o.yes);
-  flags.quiet = Boolean(o.quiet);
-  const [command, a1, ...rest] = positionals;
-  const s = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const [command, a1, a2] = positionals;
 
+  if (o.version) return console.log(VERSION);
   if (o.help || command === "help") return console.log(HELP);
-  if (o.version) return console.log("0.1.0");
+  if (command === "mcp") return (await import("./mcp")).runMcp();
+
+  await migrateOldFormat();
 
   switch (command) {
     case undefined:
-      if (interactive()) return menu();
-      return cmd.cmdList();
-    case "list":
+      return interactive() ? menu() : cmd.cmdLs();
     case "ls":
-      return cmd.cmdList();
-    case "current":
-    case "whoami":
-      return cmd.cmdCurrent();
-    case "use":
-    case "switch":
-      return cmd.cmdUse(a1, o);
-    case "run":
-      return cmd.cmdRun(a1, passthrough);
-    case "env":
-      return cmd.cmdEnv(a1 ?? s(o.as));
-    case "pin":
-      return cmd.cmdPin(a1, o);
-    case "hook":
-      return cmd.cmdHook(a1);
+    case "list":
+      return cmd.cmdLs();
     case "add":
       return cmd.cmdAdd(a1, o);
     case "new":
-      return cmd.cmdNew(a1, o);
-    case "login":
-      return cmd.cmdLogin(a1, o);
-    case "set":
-      return cmd.cmdSet(a1, o);
-    case "creds":
-      return cmd.cmdCreds(a1 ?? s(o.as), o);
-    case "remove":
-    case "rm":
-      return cmd.cmdRemove(a1, o);
-    case "rename":
-      return cmd.cmdRename(a1, rest[0]);
-    case "accounts":
-    case "manage":
-      return accountsManager();
-    case "doctor":
-      return cmd.cmdDoctor();
-    case "orgs":
-      return cmd.cmdOrgs(a1, rest, o);
-    case "members":
-      return cmd.cmdMembers(a1, o);
+      return cmd.cmdNew(a1, a2);
+    case "use":
+      return cmd.cmdUse(a1);
+    case "run":
+      return cmd.cmdRun(a1, passthrough);
     case "projects":
-      return cmd.cmdProjects(a1, rest, o);
-    case "connect":
-      return cmd.cmdConnect(a1, o);
+      return cmd.cmdProjects(a1, o);
+    case "find":
+      return cmd.cmdFind(a1);
     case "open":
       return cmd.cmdOpen(a1, o);
+    case "sync":
+      return cmd.cmdSync();
+    case "rename":
+      return cmd.cmdRename(a1, a2);
+    case "rm":
+      return cmd.cmdRm(a1);
+    case "creds":
+      return cmd.cmdCreds(a1, o);
     default:
-      throw new UserError(`Comando sconosciuto: ${command}`, "unknown_command", "sbs --help");
+      throw new UserError(`Unknown command: ${command}`, "unknown_command", "Try: sbs --help");
   }
 }
 

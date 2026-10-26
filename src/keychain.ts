@@ -1,26 +1,15 @@
-// Minimal wrapper around the macOS `security` tool (login keychain).
+// The few macOS `security` calls needed to take over / migrate old Keychain items.
+// sbs itself never keeps anything in the Keychain.
+const sec = (args: string[]) => Bun.spawnSync(["security", ...args], { stdout: "pipe", stderr: "pipe" });
+
+/** Presence check WITHOUT -w: it does not read the secret, so macOS does not prompt. */
+export const kcExists = (service: string, account: string) =>
+  sec(["find-generic-password", "-s", service, "-a", account]).exitCode === 0;
 
 export function kcGet(service: string, account: string): string | null {
-  const r = Bun.spawnSync(["security", "find-generic-password", "-s", service, "-a", account, "-w"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  if (r.exitCode !== 0) return null;
-  return r.stdout.toString().replace(/\n$/, "");
+  const r = sec(["find-generic-password", "-s", service, "-a", account, "-w"]);
+  return r.exitCode === 0 ? r.stdout.toString().replace(/\n$/, "") : null;
 }
 
-export function kcSet(service: string, account: string, value: string): void {
-  const r = Bun.spawnSync(
-    ["security", "add-generic-password", "-U", "-s", service, "-a", account, "-w", value],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  if (r.exitCode !== 0) throw new Error(`Portachiavi: scrittura fallita (${r.stderr.toString().trim()})`);
-}
-
-export function kcDelete(service: string, account: string): boolean {
-  const r = Bun.spawnSync(["security", "delete-generic-password", "-s", service, "-a", account], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  return r.exitCode === 0;
-}
+export const kcDelete = (service: string, account: string) =>
+  sec(["delete-generic-password", "-s", service, "-a", account]).exitCode === 0;

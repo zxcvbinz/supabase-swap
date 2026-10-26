@@ -6,7 +6,6 @@
       "package-name": "sbs",
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",
-      "release-as": "0.2.0",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "draft": false,
